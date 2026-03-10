@@ -3,11 +3,13 @@ import argparse
 from collections import defaultdict
 
 parser = argparse.ArgumentParser(description="Split .phy by RAD locus from VCF")
-parser.add_argument("--vcf",  required=True, help="input VCF file")
-parser.add_argument("--phy",  required=True, help="input .phy file")
-parser.add_argument("-m", "--min-snp", type=int, default=1, help="minimum number of SNPs per locus (default: 1)")
-parser.add_argument("-l", "--min-len", type=int, default=1, help="minimum sequence length per locus in bp (default: 1)")
+parser.add_argument("--vcf",     required=True, help="input VCF file")
+parser.add_argument("--phy",     required=True, help="input .phy file")
+parser.add_argument("-m", "--min-snp", type=int,   default=1,   help="minimum number of SNPs per locus (default: 1)")
+parser.add_argument("-l", "--min-len", type=int,   default=1,   help="minimum locus length in bp (default: 1)")
+parser.add_argument("-N", "--max-n",   type=float, default=0.0, help="maximum proportion of N per locus (0-1, default: 0 = no filter)")
 parser.add_argument("-o", "--outdir",  default="loci_out", help="output folder name (default: loci_out)")
+parser.add_argument("--merge", action="store_true", help="also write all passing loci into one merged file")
 args = parser.parse_args()
 
 os.makedirs(args.outdir, exist_ok=True)
@@ -36,7 +38,8 @@ for lid in locus_cols:
     if n_snp >= args.min_snp and length >= args.min_len:
         kept[lid] = locus_cols[lid]
 
-print("Loci passing filters: %d" % len(kept))
+print("  Total loci in VCF       : %d" % len(locus_cols))
+print("  Loci passing -m and -l  : %d" % len(kept))
 
 # 3. read .phy
 print("Reading .phy file...")
@@ -53,18 +56,68 @@ with open(args.phy) as f:
         taxa.append(parts[0])
         seqs.append(parts[1].replace(" ", ""))
 
-print("Loaded %d taxa x %d sites" % (len(taxa), len(seqs[0])))
+print("  Loaded %d taxa x %d sites" % (len(taxa), len(seqs[0])))
 
-# 4. write one .phy per locus
+# 4. apply -N filter and write loci
 print("Writing loci to '%s/'..." % args.outdir)
-for i, (lid, cols) in enumerate(sorted(kept.items(), key=lambda x: int(x[0])), 1):
+
+n_filter = args.max_n
+use_n_filter = (n_filter > 0.0)
+n_removed_by_N = 0
+n_written = 0
+
+merged_path = os.path.join(args.outdir, "merged.phy") if args.merge else None
+merge_blocks = []  # list of (n_snp, list of seqs per taxon)
+
+sorted_loci = sorted(kept.items(), key=lambda x: int(x[0]))
+
+for i, (lid, cols) in enumerate(sorted_loci, 1):
+    # extract sub-sequences for all taxa
+    sub_seqs = ["".join(seq[c] for c in cols) for seq in seqs]
+
+    # -N filter: check N proportion across all taxa x sites
+    if use_n_filter:
+        total_chars = sum(len(s) for s in sub_seqs)
+        total_n     = sum(s.upper().count("N") for s in sub_seqs)
+        n_prop = total_n / float(total_chars)
+        if n_prop > n_filter:
+            n_removed_by_N += 1
+            continue
+
+    # write individual locus file
     outpath = os.path.join(args.outdir, "locus_%s.phy" % lid)
     with open(outpath, "w") as out:
         out.write("%d %d\n" % (len(taxa), len(cols)))
-        for name, seq in zip(taxa, seqs):
-            sub = "".join(seq[c] for c in cols)
-            out.write("%s  %s\n" % (name, sub))
-    if i % 1000 == 0:
-        print("  %d/%d done" % (i, len(kept)))
+        for name, sub in zip(taxa, sub_seqs):
+            out.write("^%s  %s\n" % (name, sub))
 
-print("Done! %d loci saved to '%s/'" % (len(kept), args.outdir))
+    if args.merge:
+        merge_blocks.append((len(cols), sub_seqs))
+
+    n_written += 1
+    if i % 1000 == 0:
+        print("  [%d/%d] processed..." % (i, len(kept)))
+
+# report
+print("")
+print("=== Summary ===")
+print("  Loci passing -m / -l    : %d" % len(kept))
+if use_n_filter:
+    print("  Removed by -N (>%.2f)   : %d" % (n_filter, n_removed_by_N))
+print("  Loci written            : %d" % n_written)
+print("  Output folder           : %s/" % args.outdir)
+
+# 5. write merged file
+if args.merge and merge_blocks:
+    total_sites = sum(b[0] for b in merge_blocks)
+    print("  Writing merged file     : %s" % merged_path)
+    with open(merged_path, "w") as mf:
+        mf.write("%d %d\n\n" % (len(taxa), total_sites))
+        for block_idx, (n_snp, block_seqs) in enumerate(merge_blocks):
+            for name, sub in zip(taxa, block_seqs):
+                mf.write("^%-12s %s\n" % (name, sub))
+            mf.write("\n")
+    print("  Merged loci             : %d" % len(merge_blocks))
+    print("  Merged total sites      : %d" % total_sites)
+
+print("Done!")
