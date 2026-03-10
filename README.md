@@ -1,6 +1,6 @@
 # split_loci.py
 
-Split a concatenated PHYLIP file into per-locus PHYLIP files based on RAD locus IDs from a Stacks-generated VCF, with optional filtering by minimum SNP count and minimum locus length.
+Split a concatenated PHYLIP file into per-locus PHYLIP files based on RAD, ddRAD, or other NGS locus IDs from a Stacks-generated VCF, with optional filtering by minimum SNP count and minimum locus length.
 
 ---
 
