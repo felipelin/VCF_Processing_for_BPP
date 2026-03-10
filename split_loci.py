@@ -112,8 +112,8 @@ if args.merge and merge_blocks:
     total_sites = sum(b[0] for b in merge_blocks)
     print("  Writing merged file     : %s" % merged_path)
     with open(merged_path, "w") as mf:
-        mf.write("%d %d\n\n" % (len(taxa), total_sites))
         for block_idx, (n_snp, block_seqs) in enumerate(merge_blocks):
+            mf.write("%d %d\n" % (len(taxa), n_snp))
             for name, sub in zip(taxa, block_seqs):
                 mf.write("^%-12s %s\n" % (name, sub))
             mf.write("\n")
