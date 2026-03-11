@@ -1,6 +1,6 @@
 # split_loci.py
 
-Split a concatenated PHYLIP file into per-locus PHYLIP files based on RAD locus IDs from a Stacks-generated VCF, with filtering by minimum SNP count, minimum locus length, and maximum N proportion. Optionally merges all passing loci into a single file.
+Split a concatenated PHYLIP file into per-locus PHYLIP files based on RAD locus IDs from a Stacks-generated VCF, with filtering by minimum SNP count, minimum locus length, maximum overall N proportion, and maximum per-individual N proportion. Optionally merges all passing loci into a single file.
 
 ---
 
@@ -27,7 +27,8 @@ python3 split_loci.py --vcf <input.vcf> --phy <input.phy> [options]
 | `--phy` | | Yes | — | Input concatenated PHYLIP file (from vcf2phylip) |
 | `--min-snp` | `-m` | No | 1 | Minimum number of SNPs per locus |
 | `--min-len` | `-l` | No | 1 | Minimum locus length in bp (max POS − min POS + 1) |
-| `--max-n` | `-N` | No | 0 | Maximum proportion of N per locus (0–1). 0 = no filter |
+| `--max-n` | `-N` | No | 0 | Maximum proportion of N across all individuals × all sites per locus (0–1). 0 = no filter |
+| `--max-ind-n` | `-I` | No | 0 | Maximum proportion of N per individual per locus (0–1). If any individual exceeds this, the entire locus is removed. 0 = no filter |
 | `--outdir` | `-o` | No | `loci_out` | Output folder name |
 | `--merge` | | No | off | Also write all passing loci into one merged PHYLIP file |
 
@@ -40,10 +41,21 @@ python3 split_loci.py --vcf <input.vcf> --phy <input.phy> [options]
 python3 split_loci.py --vcf m50.20260310.recode.vcf --phy m50.20260310.recode.min92.phy \
     -m 4 -l 250 -o m4l250
 
-# Also filter by N proportion and generate merged output
+# Filter by all criteria and generate merged output
 python3 split_loci.py --vcf m50.20260310.recode.vcf --phy m50.20260310.recode.min92.phy \
-    -m 4 -l 250 -N 0.3 -o m4l250 --merge
+    -m 4 -l 250 -N 0.3 -I 0.8 -o m4l250 --merge
 ```
+
+---
+
+## Filter Definitions
+
+| Filter | Level | Logic |
+|---|---|---|
+| `-m` | locus | Keep locus if number of SNPs >= threshold |
+| `-l` | locus | Keep locus if (max POS − min POS + 1) >= threshold |
+| `-N` | locus | Remove locus if N proportion across **all individuals × all sites** > threshold |
+| `-I` | individual | Remove locus if **any single individual** has N proportion > threshold at that locus |
 
 ---
 
@@ -74,14 +86,19 @@ All passing loci written to `<outdir>/merged.phy`. Each locus is its own block w
 
 ### Terminal report
 ```
+  Total loci in VCF       : 25301
+  Loci passing -m and -l  : 10036
+  Loaded 184 taxa x 2502061 sites
+
 === Summary ===
   Loci passing -m / -l    : 10036
   Removed by -N (>0.30)   : 412
-  Loci written            : 9624
+  Removed by -I (>0.80)   : 187
+  Loci written            : 9437
   Output folder           : m4l250/
   Writing merged file     : m4l250/merged.phy
-  Merged loci             : 9624
-  Merged total sites      : 874219
+  Merged loci             : 9437
+  Merged total sites      : 851234
 Done!
 ```
 
@@ -93,7 +110,7 @@ Done!
 2. Groups SNPs by locus ID and records which column index each SNP occupies in the PHYLIP file
 3. Filters loci by `-m` (SNP count) and `-l` (max POS − min POS + 1)
 4. Reads the full concatenated PHYLIP file into memory
-5. For each passing locus, applies the `-N` filter (N proportion across all taxa × all sites)
+5. For each passing locus, applies `-N` (overall N proportion) then `-I` (per-individual N proportion) filters
 6. Writes each passing locus as an individual `.phy` file with `^` prefixed sample names
 7. If `--merge` is set, writes all passing loci into a single `merged.phy`, where each locus block has its own `ntaxa nsites` header and is separated by a blank line
 
@@ -103,7 +120,7 @@ Done!
 
 - The VCF and PHYLIP must have the **same number of SNPs in the same order** — verify with `grep -v "^#" input.vcf | wc -l`
 - Locus length (`-l`) is based on genomic coordinates from the VCF POS column, not the number of SNPs
-- `-N` threshold applies across the entire locus (all taxa × all sites combined)
+- `-N` and `-I` are applied sequentially; a locus removed by `-N` will not be checked by `-I`
 - Memory usage scales with the size of the PHYLIP file (~10–15 GB RAM for 184 taxa × 2.5M sites)
 - Output loci are sorted by Stacks Catalog Locus ID (numeric order)
 - Sample names are prefixed with `^` as required by BPP
