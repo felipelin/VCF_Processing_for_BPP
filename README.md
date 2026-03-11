@@ -124,3 +124,21 @@ Done!
 - Memory usage scales with the size of the PHYLIP file (~10–15 GB RAM for 184 taxa × 2.5M sites)
 - Output loci are sorted by Stacks Catalog Locus ID (numeric order)
 - Sample names are prefixed with `^` as required by BPP
+
+---
+
+## Dependencies
+
+This script processes output from **vcf2phylip** by Edgardo M. Ortiz. If you use `split_loci.py` in your research, please also cite:
+
+> Ortiz, E.M. 2019. vcf2phylip v2.0: convert a VCF matrix into several matrix formats for phylogenetic analysis. DOI:10.5281/zenodo.2540861
+
+- GitHub: https://github.com/edgardomortiz/vcf2phylip
+
+---
+
+## Citation
+
+If you use `split_loci.py` in your research, we would be very happy if you cite us:
+
+https://github.com/felipelin/VCF_Processing_for_BPP/tree/main
