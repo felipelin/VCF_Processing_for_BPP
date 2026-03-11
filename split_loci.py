@@ -8,6 +8,7 @@ parser.add_argument("--phy",     required=True, help="input .phy file")
 parser.add_argument("-m", "--min-snp", type=int,   default=1,   help="minimum number of SNPs per locus (default: 1)")
 parser.add_argument("-l", "--min-len", type=int,   default=1,   help="minimum locus length in bp (default: 1)")
 parser.add_argument("-N", "--max-n",   type=float, default=0.0, help="maximum proportion of N per locus (0-1, default: 0 = no filter)")
+parser.add_argument("-I", "--max-ind-n", type=float, default=0.0, help="maximum proportion of N per individual per locus (0-1, default: 0 = no filter)")
 parser.add_argument("-o", "--outdir",  default="loci_out", help="output folder name (default: loci_out)")
 parser.add_argument("--merge", action="store_true", help="also write all passing loci into one merged file")
 args = parser.parse_args()
@@ -64,6 +65,9 @@ print("Writing loci to '%s/'..." % args.outdir)
 n_filter = args.max_n
 use_n_filter = (n_filter > 0.0)
 n_removed_by_N = 0
+i_filter = args.max_ind_n
+use_i_filter = (i_filter > 0.0)
+n_removed_by_I = 0
 n_written = 0
 
 merged_path = os.path.join(args.outdir, "merged.phy") if args.merge else None
@@ -82,6 +86,18 @@ for i, (lid, cols) in enumerate(sorted_loci, 1):
         n_prop = total_n / float(total_chars)
         if n_prop > n_filter:
             n_removed_by_N += 1
+            continue
+
+    # -I filter: check N proportion per individual
+    if use_i_filter:
+        failed = False
+        for sub in sub_seqs:
+            ind_n_prop = sub.upper().count("N") / float(len(sub))
+            if ind_n_prop > i_filter:
+                failed = True
+                break
+        if failed:
+            n_removed_by_I += 1
             continue
 
     # write individual locus file
@@ -104,6 +120,8 @@ print("=== Summary ===")
 print("  Loci passing -m / -l    : %d" % len(kept))
 if use_n_filter:
     print("  Removed by -N (>%.2f)   : %d" % (n_filter, n_removed_by_N))
+if use_i_filter:
+    print("  Removed by -I (>%.2f)   : %d" % (i_filter, n_removed_by_I))
 print("  Loci written            : %d" % n_written)
 print("  Output folder           : %s/" % args.outdir)
 
